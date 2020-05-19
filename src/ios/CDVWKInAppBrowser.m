@@ -21,6 +21,7 @@
 
 #if __has_include("CDVWKProcessPoolFactory.h")
 #import "CDVWKProcessPoolFactory.h"
+#import <LocalAuthentication/LocalAuthentication.h>
 #endif
 
 #import <Cordova/CDVPluginResult.h>
@@ -34,8 +35,8 @@
 
 #define    IAB_BRIDGE_NAME @"cordova_iab"
 
-#define    TOOLBAR_HEIGHT 44.0
-#define    STATUSBAR_HEIGHT 20.0
+#define    TOOLBAR_HEIGHT 40.0
+#define    STATUSBAR_HEIGHT 0.0
 #define    LOCATIONBAR_HEIGHT 21.0
 #define    FOOTER_HEIGHT ((TOOLBAR_HEIGHT) + (LOCATIONBAR_HEIGHT))
 
@@ -1122,17 +1123,63 @@ BOOL isExiting = FALSE;
 // change that value.
 //
 - (float) getStatusBarOffset {
+    if (UIInterfaceOrientationIsLandscape([[UIApplication sharedApplication] statusBarOrientation])) {
+        return 0.0;
+    }
+    
     CGRect statusBarFrame = [[UIApplication sharedApplication] statusBarFrame];
     float statusBarOffset = IsAtLeastiOSVersion(@"7.0") ? MIN(statusBarFrame.size.width, statusBarFrame.size.height) : 0.0;
     return statusBarOffset;
 }
 
 - (void) rePositionViews {
+    [self fixWebViewSize];
     if ([_browserOptions.toolbarposition isEqualToString:kInAppBrowserToolbarBarPositionTop]) {
-        [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, TOOLBAR_HEIGHT, self.webView.frame.size.width, self.webView.frame.size.height)];
+        [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, self.webView.frame.origin.y, self.webView.frame.size.width, self.webView.frame.size.height)];
         [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, [self getStatusBarOffset], self.toolbar.frame.size.width, self.toolbar.frame.size.height)];
     }
 }
+
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [coordinator animateAlongsideTransition:^(id  _Nonnull context) {
+    } completion:^(id  _Nonnull context) {
+        [self rePositionViews];
+    }];
+}
+
+- (void) fixWebViewSize {
+    CGRect viewBounds = self.view.bounds;
+    
+    if (UIInterfaceOrientationIsLandscape([[UIApplication sharedApplication] statusBarOrientation])) {
+        viewBounds.origin.y = TOOLBAR_HEIGHT;
+        viewBounds.size.height = viewBounds.size.height - (TOOLBAR_HEIGHT);
+    } else {
+        viewBounds.origin.y = [self getStatusBarOffset] + TOOLBAR_HEIGHT;
+        viewBounds.size.height = viewBounds.size.height - (TOOLBAR_HEIGHT + [self getStatusBarOffset]);
+    }
+    
+    if ([self hasDeviceNotch]) {
+        viewBounds.size.height -= 21;
+    }
+    self.webView.frame = viewBounds;
+}
+
+- (BOOL)hasDeviceNotch
+{
+    if ((UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)) {
+        return NO;
+    }
+    else {
+        LAContext* context = [[LAContext alloc] init];
+        [context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+                             error:nil];
+                             
+        return [context biometryType] == LABiometryTypeFaceID;
+    }
+}
+
+
 
 // Helper function to convert hex color string to UIColor
 // Assumes input like "#00FF00" (#RRGGBB).
